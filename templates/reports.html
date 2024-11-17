@@ -1,0 +1,267 @@
+<!-- templates/reports.html -->
+{% extends "base.html" %} {% block title %}Light Status Reports{% endblock %} {%
+block content %}
+<div class="container-fluid py-4">
+  <!-- Filters -->
+  <div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filters</h5>
+    </div>
+    <div class="card-body">
+      <form method="GET" class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Start Date</label>
+          <input
+            type="date"
+            name="start_date"
+            class="form-control"
+            value="{{ start_date }}"
+          />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">End Date</label>
+          <input
+            type="date"
+            name="end_date"
+            class="form-control"
+            value="{{ end_date }}"
+          />
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">LDR</label>
+          <select name="ldr_id" class="form-select">
+            <option value="">All</option>
+            <option value="1">LDR 1</option>
+            <option value="2">LDR 2</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            <option value="">All</option>
+            <option value="ON">ON</option>
+            <option value="OFF">OFF</option>
+            <option value="DIM">DIM</option>
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="fas fa-search me-2"></i>Apply Filters
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card bg-success text-white">
+        <div class="card-body">
+          <h5>Total ON Time</h5>
+          <h3 id="on-time">0 hrs</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-danger text-white">
+        <div class="card-body">
+          <h5>Total OFF Time</h5>
+          <h3 id="off-time">0 hrs</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-warning text-white">
+        <div class="card-body">
+          <h5>Total DIM Time</h5>
+          <h3 id="dim-time">0 hrs</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-info text-white">
+        <div class="card-body">
+          <h5>Flicker Events</h5>
+          <h3 id="flicker-count">0</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Report -->
+  <div class="card">
+    <div
+      class="card-header bg-primary text-white d-flex justify-content-between align-items-center"
+    >
+      <h5 class="mb-0"><i class="fas fa-table me-2"></i>Detailed Report</h5>
+      <a href="{{ url_for('export_report') }}" class="btn btn-light btn-sm">
+        <i class="fas fa-download me-2"></i>Export CSV
+      </a>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Date/Time</th>
+              <th>LDR</th>
+              <th>Value</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for reading in readings %}
+            <tr>
+              <td>{{ reading.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+              <td>LDR {{ reading.ldr_id }}</td>
+              <td>{{ reading.value }}</td>
+              <td>
+                <span
+                  class="badge bg-{{ 'success' if reading.status == 'ON' 
+                                                    else 'danger' if reading.status == 'OFF' 
+                                                    else 'warning' }}"
+                >
+                  {{ reading.status }}
+                </span>
+              </td>
+              <td>
+                {% if reading.is_flickering %}
+                <span class="badge bg-danger">Yes</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script>
+  let lastUpdateTime = new Date();
+
+  function updateReport() {
+    fetch("/report-updates")
+      .then((response) => response.json())
+      .then((data) => {
+        updateTable(data.readings);
+        updateStats(data.stats);
+      });
+  }
+
+  function updateAlerts(alerts) {
+    const alertsContainer = document.getElementById("alerts-container");
+    alertsContainer.innerHTML = alerts
+      .map(
+        (alert) => `
+        <div class="alert alert-${
+          alert_conditions[alert.status]
+        } alert-dismissible fade show">
+            <strong>LDR ${alert.ldr_id}:</strong> ${alert.status} 
+            (Value: ${alert.value}) at ${alert.time}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `
+      )
+      .join("");
+  }
+
+  function highlightFlickering(readings) {
+    const flickeringLdrs = readings
+      .filter((r) => r.is_flickering)
+      .map((r) => r.ldr_id);
+
+    if (flickeringLdrs.length > 0) {
+      const alert = document.createElement("div");
+      alert.className = "alert alert-danger alert-dismissible fade show";
+      alert.innerHTML = `
+            <strong>Warning!</strong> Flickering detected on LDR ${flickeringLdrs.join(
+              ", "
+            )}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+      document.getElementById("alerts-container").appendChild(alert);
+    }
+  }
+
+  function getStatusClass(status) {
+    switch (status) {
+      case "ON":
+        return "success";
+      case "OFF":
+        return "danger";
+      case "DIM":
+        return "warning";
+      default:
+        return "secondary";
+    }
+  }
+
+  function updateTable(readings) {
+    const tbody = document.querySelector(".table tbody");
+    tbody.innerHTML = readings
+      .map(
+        (reading) => `
+        <tr>
+            <td>${reading.timestamp}</td>
+            <td>LDR ${reading.ldr_id}</td>
+            <td>${reading.value}</td>
+            <td>
+                <span class="badge bg-${getStatusClass(reading.status)}">
+                    ${reading.status}
+                </span>
+                ${
+                  reading.is_flickering === "True"
+                    ? '<span class="badge bg-danger ms-1">FLICKERING</span>'
+                    : ""
+                }
+            </td>
+        </tr>
+    `
+      )
+      .join("");
+  }
+
+  function showWarning(message) {
+    const alertsContainer = document.getElementById("alerts-container");
+    const alert = `
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    alertsContainer.innerHTML = alert;
+  }
+
+  function formatTime(hours) {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${h}h ${m}m`;
+  }
+
+  function updateStats(stats) {
+    document.getElementById("on-time").textContent = stats.on_time;
+    document.getElementById("off-time").textContent = stats.off_time;
+    document.getElementById("dim-time").textContent = stats.dim_time;
+    document.getElementById("flicker-count").textContent = stats.flicker_count;
+  }
+
+  // Update every 5 seconds
+  setInterval(updateReport, 5000);
+  updateReport();
+</script>
+
+<!-- Update reports.html refresh -->
+<script>
+  setInterval(() => {
+    fetch("/report-updates")
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Report update:", new Date().toISOString());
+        updateTable(data.readings);
+      });
+  }, 5000); // Match Firebase polling
+</script>
+{% endblock %}

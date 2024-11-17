@@ -1,0 +1,138 @@
+<!-- templates/ldr.html -->
+{% extends "base.html" %} {% block title %}LDR {{ ldr_id }} Details{% endblock
+%} {% block extra_css %}
+<link
+  href="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.css"
+  rel="stylesheet"
+/>
+{% endblock %} {% block content %}
+<div class="container-fluid py-4">
+  <div class="row mb-4">
+    <div class="col">
+      <a href="{{ url_for('dashboard') }}" class="btn btn-outline-primary mb-3">
+        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+      </a>
+      <h2><i class="fas fa-lightbulb me-2"></i>LDR {{ ldr_id }} Details</h2>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header bg-primary text-white">
+      <div class="d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Current Status</h5>
+        <span id="timestamp" class="badge bg-light text-dark">
+          {{ current_time.strftime('%Y-%m-%d %H:%M:%S') }}
+        </span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="row align-items-center mb-4">
+        <div class="col">
+          <h3>
+            Value: <span id="ldr-value" class="badge bg-info">{{ value }}</span>
+          </h3>
+        </div>
+        <div class="col-auto">
+          <span id="ldr-status" class="badge bg-{{ status_class }}"
+            >{{ status }}</span
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">Real-time Values</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="ldrChart" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Initialize chart
+  const ctx = document.getElementById("ldrChart").getContext("2d");
+  const chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: `LDR {{ ldr_id }} Values`,
+          data: [],
+          borderColor: "rgb(75, 192, 192)",
+          tension: 0.1,
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          suggestedMax: 1200,
+        },
+      },
+      animation: {
+        duration: 0,
+      },
+      plugins: {
+        legend: {
+          display: false,
+        },
+      },
+    },
+  });
+
+  function updateLDR() {
+    fetch("/update")
+      .then((response) => response.json())
+      .then((data) => {
+        const value = data[`ldr{{ ldr_id }}`];
+        const now = new Date().toLocaleTimeString("en-US", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+
+        // Update value and status
+        document.getElementById("ldr-value").textContent = value;
+        document.getElementById("timestamp").textContent = now;
+
+        // Update chart
+        chart.data.labels.push(now);
+        chart.data.datasets[0].data.push(value);
+
+        // Keep last 10 readings
+        if (chart.data.labels.length > 10) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+        }
+
+        chart.update();
+
+        // Update status
+        const status = value < 500 ? "OFF" : value > 1000 ? "ON" : "DIM";
+        const statusClass =
+          status === "ON" ? "success" : status === "OFF" ? "danger" : "warning";
+
+        const statusElement = document.getElementById("ldr-status");
+        statusElement.textContent = status;
+        statusElement.className = `badge bg-${statusClass}`;
+      });
+  }
+
+  setInterval(updateLDR, 5000);
+  updateLDR();
+</script>
+{% endblock %}

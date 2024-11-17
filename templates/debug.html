@@ -1,0 +1,112 @@
+<!-- templates/debug.html -->
+{% extends "base.html" %} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<style>
+  #map {
+    height: 400px;
+    width: 100%;
+    margin: 20px 0;
+    border-radius: 8px;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header bg-primary text-white">
+      <h5 class="mb-0">Debug Tools</h5>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('send_report') }}">
+        <div class="mb-3">
+          <label class="form-label">Report Date</label>
+          <input
+            type="date"
+            name="date"
+            class="form-control"
+            value="{{ datetime.now().strftime('%Y-%m-%d') }}"
+          />
+        </div>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-file-pdf me-2"></i>Generate Report
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">
+          <i class="fas fa-map-marker-alt me-2"></i>Light Location
+        </h5>
+      </div>
+      <div class="card-body">
+        <div id="map"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    let marker;
+    const defaultCoords = [19.0222, 72.8561];
+    const map = L.map("map").setView(defaultCoords, 15);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+
+    function updateLocation() {
+      fetch("/update")
+        .then((response) => response.json())
+        .then((data) => {
+          // Get coordinates from Firebase if available
+          const lat = data.latitude || defaultCoords[0];
+          const lng = data.longitude || defaultCoords[1];
+
+          // Create or update marker
+          if (!marker) {
+            marker = L.marker([lat, lng]).addTo(map);
+          } else {
+            marker.setLatLng([lat, lng]);
+          }
+
+          // Update status popup
+          const value = data.ldr1;
+          const status = value < 500 ? "OFF" : value > 1000 ? "ON" : "DIM";
+          const statusColor = {
+            ON: "#28a745",
+            OFF: "#dc3545",
+            DIM: "#ffc107",
+          }[status];
+
+          marker
+            .bindPopup(
+              `
+                        <div style="text-align: center;">
+                            <strong>Street Light Status</strong><br>
+                            Location: ${lat}, ${lng}<br>
+                            <span style="color: ${statusColor}">
+                                Status: ${status}<br>
+                                Value: ${value}
+                            </span>
+                        </div>
+                    `
+            )
+            .openPopup();
+        });
+    }
+
+    // Initial update and start interval
+    updateLocation();
+    setInterval(updateLocation, 5000);
+  });
+</script>
+{% endblock %}

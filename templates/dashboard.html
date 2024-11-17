@@ -1,0 +1,160 @@
+<!-- dashboard.html -->
+{% extends "base.html" %} {% block extra_css %}
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<style>
+  #map {
+    height: 400px;
+    width: 100%;
+    border-radius: 8px;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="container-fluid py-4">
+  <!-- LDR Status Table -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><i class="fas fa-table me-2"></i>Light Status</h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>LDR</th>
+                  <th>Value</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for id in [1, 2] %}
+                <tr>
+                  <td>LDR {{ id }}</td>
+                  <td id="value-ldr{{ id }}">-</td>
+                  <td>
+                    <span id="status-ldr{{ id }}" class="badge bg-secondary"
+                      >Unknown</span
+                    >
+                  </td>
+                  <td>
+                    <a
+                      href="{{ url_for('ldr_detail', ldr_id=id) }}"
+                      class="btn btn-sm btn-outline-primary"
+                    >
+                      <i class="fas fa-chart-line me-1"></i>Details
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">
+            <i class="fas fa-map-marker-alt me-2"></i>LDR1 Location
+          </h5>
+        </div>
+        <div class="card-body">
+          <div id="map"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  let map = null;
+  let marker = null;
+
+  function initMap(coords) {
+    if (map) return;
+
+    map = L.map("map").setView([coords.lat, coords.lng], 15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(
+      map
+    );
+    marker = L.marker([coords.lat, coords.lng]).addTo(map);
+  }
+
+  function updateLocation() {
+    fetch("/get-current-location")
+      .then((response) => response.json())
+      .then((data) => {
+        if (!map) {
+          initMap(data);
+        }
+
+        if (marker) {
+          marker.setLatLng([data.lat, data.lng]);
+
+          const value = data.ldr1;
+          const status = value < 500 ? "OFF" : value > 1000 ? "ON" : "DIM";
+          const statusColor = {
+            ON: "success",
+            OFF: "danger",
+            DIM: "warning",
+          }[status];
+
+          marker
+            .bindPopup(
+              `
+                    <div style="text-align: center;">
+                        <strong>LDR1 Status</strong><br>
+                        <span class="badge bg-${statusColor}">${status}</span><br>
+                        Value: ${value}
+                    </div>
+                `
+            )
+            .openPopup();
+        }
+      })
+      .catch((error) => console.error("Location update error:", error));
+  }
+
+  // Update table data separately
+  function updateTable() {
+    fetch("/update")
+      .then((response) => response.json())
+      .then((data) => {
+        ["1", "2"].forEach((id) => {
+          const value = data[`ldr${id}`];
+          document.getElementById(`value-ldr${id}`).textContent = value;
+
+          const status = value < 500 ? "OFF" : value > 1000 ? "ON" : "DIM";
+          const statusBadge = document.getElementById(`status-ldr${id}`);
+          statusBadge.className = `badge bg-${
+            status === "ON"
+              ? "success"
+              : status === "OFF"
+              ? "danger"
+              : "warning"
+          }`;
+          statusBadge.textContent = status;
+        });
+      })
+      .catch((error) => console.error("Table update error:", error));
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    updateLocation();
+    updateTable();
+    setInterval(updateLocation, 5000);
+    setInterval(updateTable, 5000);
+  });
+</script>
+{% endblock %}
